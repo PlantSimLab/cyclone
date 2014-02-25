@@ -386,6 +386,7 @@ void  trajNextStateWithSpeeds(const unlong curState, uchar * ternState[], uchar 
   // state transitioned to.
   void generateEdges(bool writeFile, string filename, bool verbose, bool includeTables);
 
+  void fillEdgeArray(int cores);
 
   // PRE: writeFile, outFilename, verbose, inFilename are all
   // defined. inFilename identifies a file with a correctly formatted
