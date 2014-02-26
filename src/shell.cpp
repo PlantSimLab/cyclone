@@ -80,7 +80,7 @@ int main(int argc, char * argcv[])
   int numRandomSteps = 0;
   int numRandomRuns = 0;
   bool tables = true, pds = false, writeFile = false, edges = false, verbose =
-      true, traj = false, multitraj = false, randomUpdate = false,
+      false, traj = false, multitraj = false, randomUpdate = false,
       includeTables = false;
   int state_check;
   char ** multitrajFiles;

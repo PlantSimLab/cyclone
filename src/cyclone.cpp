@@ -790,9 +790,6 @@ unlong Cyclone::makeTrajectories(unlong maxState)
       // If this trajectory exists
       if (path->size() > 0)
         {
-          std::cout << path->size() << std::endl;
-          outputCycle(*path, 0);
-
           // Create an association with the first state reached that has
           // already been reached
 
