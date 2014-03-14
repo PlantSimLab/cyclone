@@ -232,8 +232,8 @@ void Cyclone::initializeUpdateSpeeds(const int * unsortedSpeeds)
 
   for (int i = 0; i < num_vars; i++)
     {
-      varsByUpdateSpeed[unsortedSpeeds[i]][sizeVarsByUpdateSpeed[unsortedSpeeds[i]]] =
-          i;
+      std::cout << "i " << i << " unsortedSpeeds " << unsortedSpeeds[i] << " sizeVarsByUpdateSpeed " << sizeVarsByUpdateSpeed[unsortedSpeeds[i]] << std::endl;
+      varsByUpdateSpeed[unsortedSpeeds[i]][sizeVarsByUpdateSpeed[unsortedSpeeds[i]]] = i;
       sizeVarsByUpdateSpeed[unsortedSpeeds[i]]++;
     }
 
@@ -1359,6 +1359,8 @@ Cyclone::~Cyclone()
 void Cyclone::generateEdges(bool writeFile, string filename, bool pverbose,
                             bool pincludeTables)
 {
+  initializeSHM(total_states);
+
   fillEdgeArray(1);
 
   verbose = pverbose;
