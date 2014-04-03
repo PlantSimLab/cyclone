@@ -18,12 +18,11 @@ using namespace std;
 // input, vars is the number of variables in the whole system, states
 // is the number of states possible (0, 1, 2)
 // POST: this table is defined according to the input table
-Table::Table(string input, unlong states[], int states_size){
-
+Table::Table(string input, unlong states[], int states_size, vector<string> * varNamesVector){
 
   string temp = input + "\0";
 
-  temp = parseVars(temp);
+  temp = parseVars(temp, varNamesVector);
   // ASSERT: varOrder is initialized and temp contains only the output
   // column
   num_states_size = states_size;
@@ -52,7 +51,7 @@ Table::Table(string input, unlong states[], int states_size){
   reftable = new unlong[reftable_size];
   table = new unlong[table_size];
 
-  // INCREDIBLY HACKISH, ONLY WORKS FOR NUM_STATES < 11
+  // INCREDIBLY HACKISH, ONLY WORKS FOR num_states < 11
   makeTable(temp);
 
 }
@@ -174,31 +173,37 @@ void Table::makeTable(string values){
 // Thus: x1 x3 x5 creates a varOrder vector of [0, 2, 4]
 // input is modified to strip these x values from it and is passed
 // back by reference as well as returned
-string Table::parseVars(string & input){
-  vector<int> * breakPoints = new vector<int>();
+string Table::parseVars(string & input, vector<string> * varNamesVector){
+  std::cout << "\n*** input 1 = " << input << std::endl;
   // Erase leading \n's
-  while (input.at(0) != 'x'){
+  while ((!isalpha(input.at(0))) || input.at(0) == '\n'){  
     input = input.substr(1, input.length());
   }
   
-  // Breakpoint at each 'x'
-  int newline = 0;
-  for (int i = 0; input.at(i) != '\n'; i++){
-    if (input.at(i) == 'x'){
-      breakPoints->push_back(i);
-    }
-    newline = i + 1;
-  }
-  
+  // add each variable name position
+  stringstream stream(input);
+  string name;
   varOrder = new vector<uchar>();
-  for (int i = 0; i < breakPoints->size() - 1; i++){
-    varOrder->push_back(atoi(input.substr(breakPoints->at(i) + 1, breakPoints->at(i + 1) - breakPoints->at(i) - 2).c_str())-1);
+  while (stream >> name) {
+      if (name == "\n") break;
+      for (int i=0; i < varNamesVector->size(); i++) {
+          if (name == varNamesVector->at(i)) {
+              varOrder->push_back(i);
+              break;
+          }
+      }
+  }
+  num_vars = varOrder->size();
+  int len = 0;
+  for (int i=0; i < num_vars; i++) {
+      len += (varNamesVector->at(varOrder->at(i)).length()+1);
   }
 
+  input = input.substr(len, input.length() - len);
+  
+  varOrder->pop_back(); // remove the last variable name (duplicated one at the last)
   num_vars = varOrder->size();
-
-  input = input.substr(newline + 1, input.length() - newline);
-  delete breakPoints;
+ std::cout << "\n*** input 2 = \n" << input << std::endl;
   return input;
 }
 
@@ -230,16 +235,19 @@ unlong Table::getEntry(uchar* entry){
   return result;
 }
 
-void Table::printTable(ostream &output){
+void Table::printTable(ostream &output, vector<string> * varNamesVector){
 
+  string name = "";
   for (int i = 0; i < varOrder->size(); i++){
-    output << "x" << (int)varOrder->at(i) + 1<< " ";
+    //output << "x" << (int)varOrder->at(i) + 1<< " ";
+    name = varNamesVector->at(varOrder->at(i));
+    output << name << " ";
   }
-  output << "x" << (int)varOrder->at(varOrder->size() -1) + 1<< endl;
+  output << name << endl;
 
   for (int i = 0; i < table_size; i++){
     output << (int)table[i] << "\n";
-  }
+  } output << endl;
 
 }
 

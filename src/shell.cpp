@@ -26,7 +26,8 @@ string readInput(string filename)
 
       char * temp = new char[LINESIZE];
 
-      // Read the file into the input string
+      // Read the entire file contents into one input string "input"
+      // adding one character "\n" at the end of each line read
       while (inputStream)
         {
           int oldLength = input.length();
@@ -41,19 +42,18 @@ string readInput(string filename)
           input += "\n";
         }
       input += '\0';
-      delete temp;
     }
   else
     {
       cout << "Input File: *" << filename << "* Not Found" << endl;
     }
-  return input;
+  return input; // this input has the entire string data in the input file
 }
 
 // PRE: tables abd pds are defined as representing the user's choice
-// (or lack thereof if they are both false) of input type. Num_States
+// (or lack thereof if they are both false) of input type. numStates
 // is the number of states the user has entered
-// POST: either tables or pds is true, and num_states is >= MIN_STATES
+// POST: either tables or pds is true, and num_statesis >= MIN_STATES
 void promptUser(bool & tables, bool & pds)
 {
   // If table/PDS is unspecified:
@@ -119,12 +119,10 @@ int main(int argc, char * argcv[])
             {
               verbose = true;
             }
-
           // Check for -edges argument
-          else if (temp.compare("-edges") == 0)
-            {
+          else if (temp.compare("-edges") == 0) {
               edges = true;
-            }
+          }
 
           // Check for -traj argument
           else if (temp.compare("-traj") == 0)

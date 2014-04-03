@@ -4,6 +4,8 @@
 #include "PDS.h"
 #include <stdlib.h>
 #include <iostream>
+#include <stdio.h>
+#include <ctype.h>
 
 using namespace std;
 
@@ -18,7 +20,7 @@ PDS::PDS(string input, int states){
   //cout << input << endl;
   // Trim to remove f#=
 
-  num_states = states;
+  numStates = states;
 
   int equalBreak = 0;
   for (int i = 0; i < input.length() && input[i] != '='; i++){
@@ -73,7 +75,8 @@ PDS::PDS(string input, int states){
 bool PDS::hasCoef(string input){
   int xIndex = -1;
   for (int i = 0; i < input.length(); i++){
-    if (input[i] == 'x'){
+    if (isalpha(input[i])){
+    //if (input[i] == 'x'){
       xIndex = i;
     }
   }
@@ -97,8 +100,8 @@ void PDS::parseTerm(string input, int termNum){
   if (input.length() > 1){
 
     // cout << "COEF: " << input.substr(0, breakPoints[1]) << endl;
+    //if (isalpha(input[0])|| (breakPoints.size() > 1 && !hasCoef(input.substr(0, breakPoints[1])))){
     if (input[0] == 'x' || (breakPoints.size() > 1 && !hasCoef(input.substr(0, breakPoints[1])))){
-
       coefs.push_back(1);
     }
 
@@ -173,7 +176,7 @@ void PDS::parseVar(string input, int termNum){
      //  result += temp;
   }
    // cout << "E: " << result << endl;
-       result = result % num_states;
+       result = result % numStates;
        //   cout << "POST MOD: " << result << endl;
    return result;
 }
@@ -188,7 +191,7 @@ int PDS::resolveTerm(uchar * state, uchar coef, vector<uchar> theseVars, vector<
     result *= resolveVar(state[theseVars[i]], thesePows[i]);
   }
 
-  result = result % num_states;
+  result = result % numStates;
 
   return result;
 }

@@ -24,7 +24,7 @@ class Table{
   // Thus: x1 x3 x5 creates a varOrder vector of [0, 2, 4]
   // input is modified to strip these x values from it and is passed
   // back by reference as well as returned
-  string parseVars(string & input);
+  string parseVars(string & input, vector<string> * varNamesVector);
 
   // PRE: values is a string with a value for each entry in the (T+1)
   // column of an input table. These values must be less than 10 because
@@ -52,18 +52,18 @@ class Table{
   unlong num_states_size; // the number of variables in the total model
   unlong table_size; // the size of the values table:
 			    // (num_states^num_vars)
-  unlong reftable_size;  // size of the reference table:
+unlong reftable_size;  // size of the reference table:
   // (((num_states^num_vars) -1) / (num_states - 1)) - 1
   // if num_states[i] == numstates[j] for all i, j
   
 
-void printTable(ostream & output);
+void printTable(ostream & output, vector<string> * varNamesVector);
 
   // PRE: this table is undefined. input is defined as a valid table
   // input, vars is the number of variables in the whole system, states
   // is the number of states possible (0, 1, 2)
   // POST: this table is defined according to the input table
- Table(string input, unlong * states, int states_size);
+ Table(string input, unlong * states, int states_size, vector<string> * varNamesVector);
   
   // PRE: orig is defined
   // POST: this table is defined as a deep copy of orig

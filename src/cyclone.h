@@ -302,7 +302,7 @@ void  trajNextStateWithSpeeds(const unlong curState, uchar * ternState[], uchar 
 
   unlong total_states; // total state space size
 
-  unlong * num_states; // number of possibilities for states [0,1,2],
+  unlong * numStates; // number of possibilities for states [0,1,2],
   // with an entry for each table/PDS
 
   unlong num_processes; // number of subprocesses being made
@@ -317,6 +317,12 @@ void  trajNextStateWithSpeeds(const unlong curState, uchar * ternState[], uchar 
   // output cycles until the run finishes
  
   string modelname, runname;
+  
+  string * varNames;
+  
+  string * nodeNames;
+  
+  vector<string> * varNamesVector;
 
   int * varSpeeds; // speed-by-variable
 

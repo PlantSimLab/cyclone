@@ -15,7 +15,7 @@ using namespace std;
 class PDS{
  private:
 
-  int num_states;
+  int numStates;
 
   // PRE: all inputs are defined
   // POST: the mathematical result is returned

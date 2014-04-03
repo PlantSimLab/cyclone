@@ -25,6 +25,10 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <algorithm>
+#include <iterator>
+#include <sstream>
+#include <boost/shared_ptr.hpp>
 
 using namespace std;
 
@@ -38,8 +42,8 @@ using namespace std;
 
 Cyclone::Cyclone()
 {
-  num_states = new unlong[1];
-  num_states[0] = 3;
+  numStates = new unlong[1];
+  numStates[0] = 3;
   usingTables = true;
 }
 
@@ -61,7 +65,7 @@ Cyclone::Cyclone(string input, bool useTables)
   total_states = 1;
   for (int i = 0; i < num_vars; i++)
     {
-      total_states *= num_states[i];
+      total_states *= numStates[i];
     }
   associations = new unlong[total_states + 1];
   checkedArray = new unlong[total_states];
@@ -72,10 +76,10 @@ Cyclone::Cyclone(const Cyclone &orig)
 {
   usingTables = orig.usingTables;
   num_vars = orig.num_vars;
-  num_states = new unlong[num_vars];
+  numStates = new unlong[num_vars];
   for (int i = 0; i < num_vars; i++)
     {
-      num_states[i] = orig.num_states[i];
+      numStates[i] = orig.numStates[i];
     }
   total_states = orig.total_states;
   state = orig.state;
@@ -121,6 +125,7 @@ void Cyclone::readTableInput(string filename)
 
       char * temp = new char[LINESIZE];
 
+      // Read each line into the input string variable one line at a time
       while (inputStream)
         {
           inputStream.getline(temp, LINESIZE);
@@ -145,57 +150,35 @@ void Cyclone::readTableInput(string filename)
 // array by parsing input
 void Cyclone::parseTableInput(string& input)
 {
-  usingSpeeds = true;
-  input = parseHeader(input);
-  varSpeeds = new int[num_vars];
+  // Read the model name, the simulation name, number of 
+  // variables, and the number of states of each variable (node)
+  input = parseHeader(input); 
+  vector<int> breakPoints;
   tables = new vector<Table>();
   tables->reserve(num_vars);
   // ASSERT: num_vars is now set and header is removed
 
-  vector<int> breakPoints;
-  char * speedStr = new char[10];
+  for (int i = 1; i < input.length()-7; i++) {
+      if (input.substr(i, 5).compare("STATE") == 0 && input.at(i - 1) == '\n') {
+          int k = i;
+          while (input.at(k) != ':') { k++; }
+          if (input.at(k) == ':') {
+              breakPoints.push_back(k+1);
+          }
+      }
+  }
+  
+  initializeUpdateSpeeds(varSpeeds);
+  // why??  breakPoints.push_back(input.length());
 
-  for (int i = 1; i < input.length() - 7; i++)
-    {
-      if (input.substr(i, 6).compare("SPEED:") == 0 && input.at(i - 1) == '\n')
-        {
-          int k = 0, inputIndex = i + 7;
-          for (; input.at(inputIndex) <= '9' && input.at(inputIndex) >= '0';
-              k++, inputIndex++)
-            {
-              speedStr[k] = input.at(inputIndex);
-              speedStr[k + 1] = '\0';
-            }
-          varSpeeds[breakPoints.size()] = atoi(speedStr);
-          breakPoints.push_back(inputIndex);
-        }
-    }
-  // If not using SPEED:
-  if (breakPoints.size() == 0)
-    {
-      for (int i = 1; i < input.length() - 7; i++)
-        {
-          if (input.at(i) == 'x' && input.at(i - 1) == '\n')
-            {
-              breakPoints.push_back(i - 1);
-            }
-        }
-      usingSpeeds = false;
-    }
-  else
-    {
-      initializeUpdateSpeeds(varSpeeds);
-    }
-  breakPoints.push_back(input.length());
-
+  // Read the states transition table data for each variable (node) and construct 
+  // a Table for the variable and push the Table to the array of tables "tables"
   Table * temp;
-  for (int i = 0; i < num_vars; i++)
-    {
+  for (int i = 0; i < num_vars; i++) {
       tables->push_back(
-          Table(
-              input.substr(breakPoints[i], breakPoints[i + 1] - breakPoints[i]),
-              num_states, num_vars));
-    }
+          Table(input.substr(breakPoints[i], breakPoints[i + 1]-breakPoints[i]), 
+                numStates, num_vars, varNamesVector));
+  }
   breakPoints.clear();
 
 }
@@ -238,7 +221,8 @@ void Cyclone::initializeUpdateSpeeds(const int * unsortedSpeeds)
     }
 
 }
-
+// This function returns the number of characters in the string starting from 
+// the beginning of the string and the ending finished with a newline character  
 int Cyclone::findNewLine(string& str)
 {
   // Because find_first_of fails...
@@ -253,48 +237,79 @@ int Cyclone::findNewLine(string& str)
   return newline;
 }
 
-// PRE: input contains a header with the number of variables
+// PRE: input contains a header with the number of variables and the number of 
+// states of each var
 // POST: the num_vars has been extracted and the input has had the
 // header removed
 string Cyclone::parseHeader(string& input)
 {
-  int newline = 0;
-  newline = findNewLine(input);
-  modelname = input.substr(1, newline - 1);
-  input = input.substr(newline, input.length() - newline);
-  newline = findNewLine(input);
-
-  runname = input.substr(1, newline - 1);
-  input = input.substr(newline, input.length() - newline);
-  newline = findNewLine(input);
-
-  string header = input.substr(0, newline);
-
-  stringstream temp;
-  temp << header;
-  temp >> num_vars;
-
-  input = input.substr(header.length(), input.length() - header.length());
-
-  num_states = new unlong[num_vars];
-  // Get state numbers for each var
-  newline = 0;
-  int k = 0;
-  for (int i = 0; i < input.length() && newline == 0; i++)
-    {
-      if (input.at(i) == '\n')
-        {
-          newline = i;
+    // newline is the length of the newline found by fineNewLine() function
+    int newline = 0;
+    newline = findNewLine(input);
+    
+    // read the model name
+    if (input.substr(1, 11).compare("MODEL NAME:") == 0 ) {
+        modelname = input.substr(13, newline-12);    
+    }
+    // jump to the next new line in the input string
+    input = input.substr(newline, input.length() - newline);
+    
+    // read the experiment name
+    newline = findNewLine(input);
+    if (input.substr(1, 16).compare("SIMULATION NAME:") == 0 ) {
+        runname = input.substr(18, newline-17);    
+    }
+    input = input.substr(newline, input.length() - newline);
+     
+    // read the total number of variables(nodes)
+    newline = findNewLine(input);
+    if (input.substr(1, 20).compare("NUMBER OF VARIABLES:") == 0) {
+        stringstream stream (input.substr(22, newline-21)); 
+        stream >> num_vars;
+    }
+    input = input.substr(newline, input.length() - newline);
+  
+    
+    // read variable name each matching to the corresponding node name
+    newline = findNewLine(input);
+    if (input.substr(1, 15).compare("VARIABLE NAMES:") == 0) {
+        varNamesVector = new vector<string>; 
+        stringstream stream (input.substr(17, newline-16));
+        int i=0;
+        string name;
+        while (stream >> name) {
+            varNamesVector->push_back(name);
         }
-      else if (input.at(i) >= '0' && input.at(i) <= '9')
-        {
-          num_states[k] = input.at(i) - '0';
-          k++;
+    }      
+    input = input.substr(newline, input.length() - newline);
+    
+    // read the number of states for each variable (node)
+    newline = findNewLine(input);
+    numStates = new unlong[num_vars];
+    if (input.substr(1, 17).compare("NUMBER OF STATES:") == 0) {
+        stringstream stream (input.substr(19, newline-18));
+        int num;
+        int i = 0;
+        while (stream >> num) {
+            numStates[i++] = num;
         }
     }
-
-  input = input.substr(newline, input.length() - newline);
-  return input;
+    input = input.substr(newline, input.length() - newline);
+     
+    // read the speed for each variable (node) 
+    newline = findNewLine(input);
+    varSpeeds = new int[num_vars];
+    if (input.substr(1, 19).compare("SPEED OF VARIABLES:") == 0) {
+        usingSpeeds= true;
+        stringstream stream (input.substr(21, newline-20));
+        int speed;
+        int i = 0;
+        while (stream >> speed){
+            varSpeeds[i++] = speed; 
+        } 
+    } else {usingSpeeds = false; }
+    input = input.substr(newline, input.length() - newline);
+    return input;
 }
 
 // PRE: filename contains the name of a valid input file
@@ -350,7 +365,7 @@ void Cyclone::parseInput(string input)
     {
       string function = removeSpaces(
           input.substr(breakPoints[i], breakPoints[i + 1] - breakPoints[i]));
-      temp = new PDS(function, num_states[0]);
+      temp = new PDS(function, numStates[0]);
       pds->push_back(*temp);
     }
   delete temp;
@@ -380,7 +395,7 @@ void Cyclone::printState(unlong curState)
     }
 
   cout << "CUR: " << curState << endl;
-  decimalToTernary(curState, temp, num_states, num_vars);
+  decimalToTernary(curState, temp, numStates, num_vars);
 
   cout << "[";
   for (int i = 0; i < num_vars; i++)
@@ -611,8 +626,8 @@ void Cyclone::subprocessRun(int childNum, int numProcesses,
       unlong b = iterState;
       for (int i = num_vars - 1; i >= 0; i--)
         {
-          ternCurState[i] = b % num_states[i];
-          b /= num_states[i];
+          ternCurState[i] = b % numStates[i];
+          b /= numStates[i];
         }
 
       // Get next state from tables
@@ -631,7 +646,7 @@ void Cyclone::subprocessRun(int childNum, int numProcesses,
       unsigned long result = 0;
       for (int i = 0; i < num_vars; i++)
         {
-          result = (result * num_states[i])
+          result = (result * numStates[i])
               + (unsigned long) (ternNextState[i]);
         }
       *((int *) (edgeArray + iterState)) = result;
@@ -684,8 +699,8 @@ void Cyclone::subprocessRunWithSpeeds(int childNum, int numProcesses,
       unlong b = iterState;
       for (int i = num_vars - 1; i >= 0; i--)
         {
-          ternState[1][i] = b % num_states[i];
-          b /= num_states[i];
+          ternState[1][i] = b % numStates[i];
+          b /= numStates[i];
         }
 
       // Fill all current states with the speed 1 state
@@ -740,7 +755,7 @@ void Cyclone::subprocessRunWithSpeeds(int childNum, int numProcesses,
       unsigned long result = 0;
       for (int i = 0; i < num_vars; i++)
         {
-          result = (result * num_states[i])
+          result = (result * numStates[i])
               + (unsigned long) (ternNextState[i]);
         }
       *((int *) (edgeArray + iterState)) = result;
@@ -822,7 +837,7 @@ unlong Cyclone::makeTrajectories(unlong maxState)
 
 ////// NOTE \\\\\
 // This method is not used in the subprocessRun to increase efficiency
-// PRE: curState is an integer <= num_states^num_vars - 1
+// PRE: curState is an integer <= numStates^num_vars - 1
 // POST: the next state, according to the PDSs or Tables, is returned
 unlong Cyclone::nextState(unlong curState, uchar temp1[], uchar temp2[])
 {
@@ -830,8 +845,8 @@ unlong Cyclone::nextState(unlong curState, uchar temp1[], uchar temp2[])
   unsigned long b = curState;
   for (int i = num_vars - 1; i >= 0; i--)
     {
-      temp1[i] = b % num_states[i];
-      b /= num_states[i];
+      temp1[i] = b % numStates[i];
+      b /= numStates[i];
     }
 
   // Get the next value for each index based on the tables
@@ -884,14 +899,14 @@ unlong Cyclone::nextState(unlong curState, uchar temp1[], uchar temp2[])
   unsigned long result = 0;
   for (int i = 0; i < num_vars; i++)
     {
-      result = (result * num_states[i]) + (unsigned long) (temp2[i]);
+      result = (result * numStates[i]) + (unsigned long) (temp2[i]);
     }
 
   return result;
 }
 
 // This method is not used in the subprocessRun to increase efficiency
-// PRE: curState is an integer <= num_states^num_vars - 1, temp and
+// PRE: curState is an integer <= numStates^num_vars - 1, temp and
 // temp2 are blank uchar arrays to store the current and next states
 // in for converting back and forth. Knockouts is a bool array with
 // true indicating a node in the network that should be treated as
@@ -909,8 +924,8 @@ unlong Cyclone::trajNextState(unlong curState, uchar temp1[], uchar temp2[],
   unsigned long b = curState;
   for (int i = num_vars - 1; i >= 0; i--)
     {
-      temp1[i] = b % num_states[i];
-      b /= num_states[i];
+      temp1[i] = b % numStates[i];
+      b /= numStates[i];
     }
 
   for (uchar i = 0; i < num_vars; i++)
@@ -937,14 +952,14 @@ unlong Cyclone::trajNextState(unlong curState, uchar temp1[], uchar temp2[],
   unsigned long result = 0;
   for (int i = 0; i < num_vars; i++)
     {
-      result = (result * num_states[i]) + (unsigned long) (temp2[i]);
+      result = (result * numStates[i]) + (unsigned long) (temp2[i]);
     }
 
   return result;
 }
 
 // This method is not used in the subprocessRun to increase efficiency
-// PRE: curState is an integer <= num_states^num_vars - 1, temp and
+// PRE: curState is an integer <= numStates^num_vars - 1, temp and
 // temp2 are blank uchar arrays to store the current and next states
 // in for converting back and forth. Knockouts is a bool array with
 // true indicating a node in the network that should be treated as
@@ -965,11 +980,11 @@ unlong Cyclone::randomUpdateNextState(const unlong curState, uchar stateArray[],
       unsigned long b = curState;
       for (int i = num_vars - 1; i >= 0; i--)
         {
-          stateArray[i] = b % num_states[i];
-          b /= num_states[i];
+          stateArray[i] = b % numStates[i];
+          b /= numStates[i];
           if (i > varToChange)
             {
-              valueOfPosition *= num_states[i];
+              valueOfPosition *= numStates[i];
             }
         }
       valToSubtract = stateArray[varToChange] * valueOfPosition;
@@ -994,7 +1009,7 @@ unlong Cyclone::randomUpdateNextState(const unlong curState, uchar stateArray[],
 }
 
 // This method is not used in the subprocessRun to increase efficiency
-// PRE: curState is an integer <= num_states^num_vars - 1, ternState
+// PRE: curState is an integer <= numStates^num_vars - 1, ternState
 // is an array of blank state vectors to store the next state
 // computated for each iteration of table lookups, ternNextState is a
 // blank state vector to store the next state in. Knockouts is a bool
@@ -1013,8 +1028,8 @@ void Cyclone::trajNextStateWithSpeeds(const unlong curState,
   unlong b = curState;
   for (int i = num_vars - 1; i >= 0; i--)
     {
-      ternCurState[1][i] = b % num_states[i];
-      b /= num_states[i];
+      ternCurState[1][i] = b % numStates[i];
+      b /= numStates[i];
     }
 
   // Fill all current states with the speed 1 state
@@ -1095,7 +1110,7 @@ void Cyclone::trajNextStateWithSpeeds(const unlong curState,
     {
       for (int b = 0; b < num_vars; b++)
         {
-          nextStates[a] = (nextStates[a] * num_states[b])
+          nextStates[a] = (nextStates[a] * numStates[b])
               + (unsigned long) (ternNextState[a + 1][b]);
         }
     }
@@ -1192,8 +1207,13 @@ void Cyclone::getComponentSizes(unlong cycles, unlong trajectories)
       temp << condensedCount[sort[i]];
       stringstream conv;
       conv << showpoint << percentage;
-      outBuffer.at(sort[i]) = "\nLIMIT CYCLE:\nComponent Size: " + temp.str()
-          + " = " + conv.str() + " %" + "\n" + outBuffer.at(sort[i]);
+      stringstream ival;
+      ival << i+1;
+      //outBuffer.at(sort[i]) = "\nLIMIT CYCLE:\nComponent Size: " + temp.str()
+      //    + "(" + conv.str() + " %)" + "\n" + outBuffer.at(sort[i]);
+      outBuffer.at(sort[i]) = "\nCOMPONENT " + ival.str() + ":\n"
+              + "Size = " + temp.str() + "(" + conv.str() + " %)\n" 
+              + "Limit Cycle:\n" + outBuffer.at(sort[i]);
     }
   //  delete condensedCount;
   //  delete stateCountByTraj;
@@ -1205,7 +1225,7 @@ void Cyclone::outputCycle(vector<unlong> & cycle)
 {
 
   stringstream output;
-  output << "Length: " << cycle.size() << endl;
+  output << "Length = " << cycle.size() << endl;
 
   uchar * temp = new uchar[num_vars];
 
@@ -1218,10 +1238,10 @@ void Cyclone::outputCycle(vector<unlong> & cycle)
         }
 
       // get the state in trinary form
-      decimalToTernary(cycle.at(i), temp, num_states, num_vars);
+      decimalToTernary(cycle.at(i), temp, numStates, num_vars);
 
       // output the state
-      output << "[ ";
+      output << "States = [ ";
       for (int k = 0; k < num_vars; k++)
         {
           output << (short) temp[k];
@@ -1240,7 +1260,7 @@ void Cyclone::outputCycle(vector<unlong> & path, int indexOfPath)
 {
 
   stringstream output;
-  output << "Length: " << path.size() - indexOfPath << endl;
+  output << "Length = " << path.size() - indexOfPath << endl;
 
   uchar * temp = new uchar[num_vars];
 
@@ -1253,10 +1273,10 @@ void Cyclone::outputCycle(vector<unlong> & path, int indexOfPath)
         }
 
       // get the state in trinary form
-      decimalToTernary(path.at(i), temp, num_states, num_vars);
+      decimalToTernary(path.at(i), temp, numStates, num_vars);
 
       // output the state
-      output << "[ ";
+      output << "States = [ ";
       for (int k = 0; k < num_vars; k++)
         {
           output << (short) temp[k];
@@ -1283,21 +1303,23 @@ void Cyclone::writeOutput(string filename)
     }
   if (writeToFile)
     {
-      *fileOut << modelname << endl << runname << endl << endl;
+      *fileOut << "MODEL NAME: " << modelname << endl;
+      *fileOut << "SIMULATION NAME: " << runname << endl;
     }
   if (verbose)
     {
-      cout << modelname << endl << runname << endl << endl;
+      cout << "MODEL NAME: " << modelname << endl;
+      cout << "SIMULATION NAME: " << runname << endl;
     }
   if (writeToFile)
     {
-      *fileOut << "STATE SPACE:\t" << total_states << endl << endl;
-      *fileOut << "CYCLES:\t" << outBuffer.size() << endl;
+      *fileOut << "SIZE OF STATE SPACE: " << total_states << endl << endl;
+      *fileOut << "NUMBER OF CYCLES: " << outBuffer.size() << endl;
     }
   if (verbose)
     {
-      cout << "STATE SPACE:\t" << total_states << endl << endl;
-      cout << "CYCLES:\t" << outBuffer.size() << endl;
+      cout << "SIZE OF STATE SPACE: " << total_states << endl << endl;
+      cout << "NUMBER OF CYCLES: " << outBuffer.size() << endl;
     }
   for (int i = 0; i < outBuffer.size(); i++)
     {
@@ -1312,13 +1334,13 @@ void Cyclone::writeOutput(string filename)
     }
   if (writeToFile)
     {
-      *fileOut << "DONE" << endl;
-      *fileOut << "<NOTES>\n</NOTES>" << endl;
+      *fileOut << "\nDONE" << endl;
+      *fileOut << "<NOTES>\n</NOTES>\n" << endl;
     }
   if (verbose)
     {
-      cout << "DONE" << endl;
-      cout << "<NOTES>\n</NOTES>" << endl;
+      cout << "\nDONE" << endl;
+      cout << "<NOTES>\n</NOTES>\n" << endl;
     }
 
   if (includeTables)
@@ -1374,10 +1396,10 @@ void Cyclone::generateEdges(bool writeFile, string filename, bool pverbose,
 
   uchar * CurrentState = new uchar[num_vars];
 
-  unlong maxState = num_states[0];
+  unlong maxState = numStates[0];
   for (unlong i = 1; i < num_vars; i++)
     {
-      maxState *= num_states[i];
+      maxState *= numStates[i];
     }
 
   // Main run loop, iterates through all possible starting states and
@@ -1395,7 +1417,7 @@ void Cyclone::generateEdges(bool writeFile, string filename, bool pverbose,
 
   for (curState = 0; curState < maxState; curState++)
     {
-      decimalToTernary(curState, CurrentState, num_states, num_vars);
+      decimalToTernary(curState, CurrentState, numStates, num_vars);
 
       if (writeToFile)
         {
@@ -1555,7 +1577,7 @@ int Cyclone::runTrajectory(vector<unlong> * path, uchar trajStart[])
 
   for (int i = 0; i < num_vars; i++)
     {
-      if (trajStart[i] < num_states[i])
+      if (trajStart[i] < numStates[i])
         {
           startWithKOsRemoved[i] = trajStart[i];
           knockouts[i] = false;
@@ -1566,7 +1588,7 @@ int Cyclone::runTrajectory(vector<unlong> * path, uchar trajStart[])
           knockouts[i] = true;
         }
     }
-  startState = ternaryToDecimal(num_vars, startWithKOsRemoved, num_states);
+  startState = ternaryToDecimal(num_vars, startWithKOsRemoved, numStates);
   unlong curState = startState;
   int cycleStart = -1;
 
@@ -1655,7 +1677,7 @@ void Cyclone::runRandomUpdateTrajectory(vector<unlong> * path,
 
   for (int i = 0; i < num_vars; i++)
     {
-      if (trajStart[i] < num_states[i])
+      if (trajStart[i] < numStates[i])
         {
           startWithKOsRemoved[i] = trajStart[i];
           knockouts[i] = false;
@@ -1666,7 +1688,7 @@ void Cyclone::runRandomUpdateTrajectory(vector<unlong> * path,
           knockouts[i] = true;
         }
     }
-  startState = ternaryToDecimal(num_vars, startWithKOsRemoved, num_states);
+  startState = ternaryToDecimal(num_vars, startWithKOsRemoved, numStates);
   unlong curState = startState;
   int cycleStart = -1;
 
@@ -1707,45 +1729,60 @@ int Cyclone::getCycle(vector<unlong> * path, unlong state)
 // outFile (if writeToFile)
 void Cyclone::outputTables()
 {
-  if (verbose)
-    {
-      cout << modelname << '\n' << runname << '\n' << tables->size() << endl;
-      for (int i = 0; i < tables->size(); i++)
-        {
-          cout << num_states[i] << '\t';
-        }
-      cout << endl << endl;
+  if (verbose) {
+      cout << "MODEL NAME: " << modelname << endl ;
+      cout << "SIMULATION NAME: " << runname << endl ;
+      cout << "NUMBER OF VARIABLES: " << num_vars << endl << endl;
+      cout << "VARIABLE NAMES: ";
+      for (int i=0; i < num_vars; i++) {
+          cout << varNamesVector->at(i) << " ";
+      } cout << endl << endl;
 
-      for (int i = 0; i < tables->size(); i++)
-        {
-          if (usingSpeeds)
-            {
-              cout << "SPEED: " << varSpeeds[i] << endl;
-            }
-          tables->at(i).printTable(cout);
-          cout << endl;
-        }
-    }
-  if (writeToFile)
-    {
-      *fileOut << modelname << '\n' << runname << '\n' << tables->size()
-          << endl;
-      for (int i = 0; i < tables->size(); i++)
-        {
-          *fileOut << num_states[i] << '\t';
-        }
-      *fileOut << endl << endl;
+      cout << "NUMBER OF STATES: ";
+      for (int i = 0; i < tables->size(); i++) {
+          cout << numStates[i] << " ";
+      } cout << endl << endl;
 
-      for (int i = 0; i < tables->size(); i++)
-        {
-          if (usingSpeeds)
-            {
-              *fileOut << "SPEED: " << varSpeeds[i] << endl;
-            }
-          tables->at(i).printTable(*fileOut);
-          *fileOut << endl;
-        }
+      cout << "SPEED OF VARIABLES: "; 
+      for (int i = 0; i < tables->size(); i++) {
+          if (usingSpeeds) {
+              cout << varSpeeds[i] << " ";
+          }
+      } cout << endl << endl;
+      
+      for (int i = 0; i < tables->size(); i++) {
+          tables->at(i).printTable(cout, varNamesVector);
+          cout << endl << endl;
+      }
+  }
+    if (writeToFile) {
+      *fileOut << "MODEL NAME: " << modelname << endl;
+      *fileOut << "SIMULATION NAME: " << runname << endl;
+      *fileOut << "NUMBER OF VARIABLES: " << num_vars << endl << endl;
+      *fileOut << "VARIABLE NAMES: ";
+      for (int i=0; i < num_vars; i++) {
+          *fileOut << varNamesVector->at(i) << " ";
+      } *fileOut << endl << endl;
+      
+      *fileOut << "NUMBER OF STATES: ";
+      for (int i = 0; i < tables->size(); i++) {
+          *fileOut << numStates[i] << " ";
+      } *fileOut << endl << endl;
+
+      *fileOut << "SPEED OF VARIABLES: "; 
+      for (int i = 0; i < tables->size(); i++) {
+          if (usingSpeeds) {
+              *fileOut << varSpeeds[i] << " ";
+          }
+      } *fileOut << endl << endl;
+      
+      for (int i = 0; i < tables->size(); i++) {
+          *fileOut << "STATE TRANSITION TABLE for " << varNamesVector->at(i) << ":\n";
+          tables->at(i).printTable(*fileOut, varNamesVector);
+          *fileOut << endl << endl;
+      }
     }
+  
 }
 
 // PRE: path is defined as the completed trajectory. CycleIndex is the
@@ -1789,7 +1826,7 @@ void Cyclone::outputTrajectory(vector<unlong> * path, int cycleIndex,
     }
   for (int i = 0; i < cycleIndex; i++)
     {
-      decimalToTernary(path->at(i), ternState, num_states, num_vars);
+      decimalToTernary(path->at(i), ternState, numStates, num_vars);
 
       if (verbose)
         {
@@ -1831,7 +1868,7 @@ void Cyclone::outputTrajectory(vector<unlong> * path, int cycleIndex,
     }
   for (int i = cycleIndex; i < path->size(); i++)
     {
-      decimalToTernary(path->at(i), ternState, num_states, num_vars);
+      decimalToTernary(path->at(i), ternState, numStates, num_vars);
 
       if (verbose)
         {
@@ -1932,7 +1969,7 @@ void Cyclone::outputRandomTrajectory(vector<unlong> * path[],
         }
       for (int i = 0; i < path[g]->size(); i++)
         {
-          decimalToTernary(path[g]->at(i), ternState, num_states, num_vars);
+          decimalToTernary(path[g]->at(i), ternState, numStates, num_vars);
 
           if (verbose)
             {
@@ -2063,3 +2100,4 @@ void Cyclone::clearSHM(int clearNum)
   initializeSHM(clearNum);
   removeSHM();
 }
+
