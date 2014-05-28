@@ -40,6 +40,9 @@ using namespace std;
 // space and outputs these, along with the percentage of the state
 // space which is a part of each component of the graph.
 
+// Modified for new table input format
+// 2014-May
+
 Cyclone::Cyclone()
 {
   numStates = new unlong[1];
