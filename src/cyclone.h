@@ -106,14 +106,6 @@ class Cyclone{
   // file.
   void run(int cores);
 
-
-  // PRE: key is defined as valid key for an SHM segment. size is
-  // defined as less than the max shared memory size / BYTES_PER_INT
-  // POST: a shared memory segment of size size * BYTES_PER_INT has been
-  // created with the key parameter. Its ID has been assigned to
-  // ID. The start address of the segment is returned.
-  int * makeSHMSegment(int key, int& ID, long size);
-
   // PRE: no shared memory segments have been created
   // POST: all shared memory segments have been created and their
   // addresses assigned to the appropriate variables
@@ -289,9 +281,10 @@ void  trajNextStateWithSpeeds(const unlong curState, uchar * ternState[], uchar 
    *
    **/
 
-  int edgeArrayID;
+  key_t mSHMKey;
+  int mSHMId;
+  int * mSHMptr;
 
-  int * edgeArray;
   unlong * associations;
 
   vector<PDS> * pds; // vector of polynomial equations for each variable
@@ -402,8 +395,6 @@ void  trajNextStateWithSpeeds(const unlong curState, uchar * ternState[], uchar 
   // POST: the path of the trajectory start to and through its limit
   // cycle are output either to command line, an output file, or both
   void generateTrajectory(bool writeFile, string outFilename, bool verbose, string inFilename, string tableFilename, bool includeTables);
-
-  void clearSHM(int clearNum);
 
   // PRE: writeFile, outFilename, verbose, inFilename are all
   // defined. inFilename identifies a file with a correctly formatted

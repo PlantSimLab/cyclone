@@ -28,7 +28,7 @@
 #include <algorithm>
 #include <iterator>
 #include <sstream>
-#include <boost/shared_ptr.hpp>
+// #include <boost/shared_ptr.hpp>
 
 using namespace std;
 
@@ -44,7 +44,10 @@ using namespace std;
 // Modified for new table input format
 // 2014-May
 
-Cyclone::Cyclone()
+Cyclone::Cyclone():
+  mSHMKey(0),
+  mSHMId(-1),
+  mSHMptr(NULL)
 {
   numStates = new unlong[1];
   numStates[0] = 3;
@@ -54,7 +57,10 @@ Cyclone::Cyclone()
 // Basic constructor: takes the number of states, the number of bits
 // to use for marking different limit cycles, the input text, and
 // whether the input is in table or PDS form
-Cyclone::Cyclone(string input, bool useTables)
+Cyclone::Cyclone(string input, bool useTables):
+  mSHMKey(0),
+  mSHMId(-1),
+  mSHMptr(NULL)
 {
   usingTables = useTables;
   if (usingTables)
@@ -76,7 +82,10 @@ Cyclone::Cyclone(string input, bool useTables)
 }
 
 // Deep copy constructor
-Cyclone::Cyclone(const Cyclone &orig)
+Cyclone::Cyclone(const Cyclone &orig):
+  mSHMKey(0),
+  mSHMId(-1),
+  mSHMptr(NULL)
 {
   usingTables = orig.usingTables;
   num_vars = orig.num_vars;
@@ -462,54 +471,65 @@ void Cyclone::printPDS()
 // POST: a shared memory segment of size size * BYTES_PER_INT has been
 // created with the key parameter. Its ID has been assigned to
 // ID. The start address of the segment is returned.
-int * Cyclone::makeSHMSegment(int key, int& ID, long size)
+void Cyclone::initializeSHM(unlong size)
 {
-  int * segStart;
-  int * fill;
+  mSHMKey = getpid();
+
   // Create segment
-  if ((ID = shmget(key, size * BYTES_PER_INT, IPC_CREAT | 0666)) < 0)
+  if ((mSHMId = shmget(mSHMKey, size * BYTES_PER_INT, IPC_CREAT | IPC_EXCL)) < 0)
     {
-      cerr << "shmget error: " << key << endl;
-      clearSHM(3);
-      initializeSHM(total_states);
+      if ((mSHMId = shmget(mSHMKey, size * BYTES_PER_INT, IPC_CREAT)) < 0)
+        {
+          cerr << "shmget error: " << mSHMKey << endl;
+          exit(1);
+        }
+
+      // This must be a leftover id we need to release it.
+      mSHMptr = (int *) shmat(mSHMId, 0, 0);
+      removeSHM();
+
+      if ((mSHMId = shmget(mSHMKey, size * BYTES_PER_INT, IPC_CREAT)) < 0)
+        {
+          cerr << "shmget error: " << mSHMKey << endl;
+          exit(1);
+        }
     }
+
   // Get the pointer to the start of the block
-  if ((segStart = (int *) shmat(ID, 0, 0)) == (int *) -1)
+  if ((mSHMptr = (int *) shmat(mSHMId, 0, 0)) == (int *) -1)
     {
       cerr << "shmat";
       exit(1);
     }
-  fill = segStart;
+
+  int * fill = mSHMptr;
+
   // Set all indices to 0
   for (unlong i = 0; i < size; i++, fill++)
     {
       *fill = 0;
     }
 
-  return segStart;
-}
-
-// PRE: no shared memory segments have been created
-// POST: all shared memory segments have been created and their
-// addresses assigned to the appropriate variables
-void Cyclone::initializeSHM(unlong total_states)
-{
-  key_t edge_array_key = EDGE_ARRAY_KEY;
-  int *shm;
-
-  edgeArray = makeSHMSegment(edge_array_key, edgeArrayID, total_states);
+  return;
 }
 
 // PRE: SHM segments are allocated
 // POST: all SHM segments have been detached and removed
 void Cyclone::removeSHM()
 {
-  shmdt(edgeArray);
+  if (mSHMptr != NULL)
+    {
+      shmdt(mSHMptr);
+      mSHMptr = NULL;
+    }
 
-  if (shmctl(edgeArrayID, IPC_RMID, NULL) < 0)
+  if (shmctl(mSHMId, IPC_RMID, NULL) < 0)
     {
       cerr << "REMOVE ERROR5: " << errno << endl;
+      exit(1);
     }
+
+  mSHMId = 0;
 }
 
 // PRE: This instance of cyclone is defined using a valid
@@ -606,7 +626,7 @@ void Cyclone::run(int cores)
 // size of the statespace.  
 // POST: all edges between childNum * cycleCountBlocks and childNum +
 // 1 * cycleCountBlocks have been computed and stored in the
-// edgeArray.
+// mShmID.
 void Cyclone::subprocessRun(int childNum, int numProcesses,
                             unlong cycleCountBlocks, unlong maxState)
 {
@@ -653,7 +673,7 @@ void Cyclone::subprocessRun(int childNum, int numProcesses,
           result = (result * numStates[i])
               + (unsigned long) (ternNextState[i]);
         }
-      *((int *) (edgeArray + iterState)) = result;
+      *((int *) (mSHMptr + iterState)) = result;
     }
 
   delete ternCurState;
@@ -762,7 +782,7 @@ void Cyclone::subprocessRunWithSpeeds(int childNum, int numProcesses,
           result = (result * numStates[i])
               + (unsigned long) (ternNextState[i]);
         }
-      *((int *) (edgeArray + iterState)) = result;
+      *((int *) (mSHMptr + iterState)) = result;
     }
 
   delete ternState;
@@ -802,7 +822,7 @@ unlong Cyclone::makeTrajectories(unlong maxState)
               checkedArray[curState] = trajCount;
 
               prevState = curState;
-              curState = *((int *) (edgeArray + curState));
+              curState = *((int *) (mSHMptr + curState));
             } while (checkedArray[curState] == 0);
         }
 
@@ -1450,7 +1470,7 @@ void Cyclone::generateEdges(bool writeFile, string filename, bool pverbose,
 
   for (curState = 0; curState < maxState; curState++)
     {
-      nextState = *((int *) (edgeArray + curState));
+      nextState = *((int *) (mSHMptr + curState));
 
       // output the state
       if (writeToFile)
@@ -2098,10 +2118,3 @@ void Cyclone::generateRandomTrajectory(bool writeFile, string outFilename,
       cerr << "Input Trajectory File not found" << endl;
     }
 }
-
-void Cyclone::clearSHM(int clearNum)
-{
-  initializeSHM(clearNum);
-  removeSHM();
-}
-
