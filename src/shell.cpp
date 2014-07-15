@@ -99,17 +99,8 @@ int main(int argc, char * argcv[])
     {
       string temp = argcv[1];
 
-      if (temp.compare("-clearSHM") == 0)
-        {
-          Cyclone * tempCyc = new Cyclone();
-          tempCyc->clearSHM(3);
-          return 0;
-        }
-      else
-        {
-          filename = temp;
-        }
-
+      filename = temp;
+ 
       for (int i = START_OF_ARGS; i < argc; i++)
         {
           temp = argcv[i];
