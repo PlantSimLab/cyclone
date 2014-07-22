@@ -476,9 +476,9 @@ void Cyclone::initializeSHM(unlong size)
   mSHMKey = getpid();
 
   // Create segment
-  if ((mSHMId = shmget(mSHMKey, size * BYTES_PER_INT, IPC_CREAT | IPC_EXCL)) < 0)
+  if ((mSHMId = shmget(mSHMKey, size * BYTES_PER_INT, IPC_CREAT | IPC_EXCL | 0666)) < 0)
     {
-      if ((mSHMId = shmget(mSHMKey, size * BYTES_PER_INT, IPC_CREAT)) < 0)
+      if ((mSHMId = shmget(mSHMKey, size * BYTES_PER_INT, IPC_CREAT | 0666)) < 0)
         {
           cerr << "shmget error: " << mSHMKey << endl;
           exit(1);
@@ -488,7 +488,7 @@ void Cyclone::initializeSHM(unlong size)
       mSHMptr = (int *) shmat(mSHMId, 0, 0);
       removeSHM();
 
-      if ((mSHMId = shmget(mSHMKey, size * BYTES_PER_INT, IPC_CREAT)) < 0)
+      if ((mSHMId = shmget(mSHMKey, size * BYTES_PER_INT, IPC_CREAT | 0666)) < 0)
         {
           cerr << "shmget error: " << mSHMKey << endl;
           exit(1);
