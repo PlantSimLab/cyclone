@@ -12,3 +12,13 @@ See [NSF Award 1146819](http://www.nsf.gov/awardsearch/showAward.do?AwardNumber=
 
 Development
 
+## Installation
+```
+git clone git@github.com:PlantSimLab/cyclone.git
+cd cyclone
+mkdir build
+cd build
+cmake .. 
+make
+```
+
